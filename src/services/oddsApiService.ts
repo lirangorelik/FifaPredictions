@@ -58,7 +58,7 @@ function parseUnsupportedMarketsFromError(message: string): string[] {
 async function fetchOddsForMarkets(markets: string[]): Promise<OddsApiEvent[]> {
   const url = new URL(`${BASE_URL}/sports/${env.ODDS_API_SPORT_KEY}/odds`);
   url.searchParams.set("apiKey", env.ODDS_API_KEY);
-  url.searchParams.set("regions", "eu,uk,us");
+  url.searchParams.set("regions", env.ODDS_API_REGIONS);
   url.searchParams.set("markets", markets.join(","));
   url.searchParams.set("oddsFormat", "decimal");
   url.searchParams.set("dateFormat", "iso");

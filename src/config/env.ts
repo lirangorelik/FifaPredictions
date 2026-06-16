@@ -12,6 +12,10 @@ const envSchema = z.object({
 
   ODDS_API_KEY: z.string().min(1),
   ODDS_API_SPORT_KEY: z.string().min(1).default("soccer_fifa_world_cup"),
+  // The Odds API charges (markets x regions) per successful call - keep this to one region
+  // unless you've confirmed you need broader bookmaker coverage, since each extra region
+  // multiplies the quota cost of every sync.
+  ODDS_API_REGIONS: z.string().min(1).default("eu"),
 
   TAVILY_API_KEY: z.string().min(1),
 
@@ -26,10 +30,11 @@ const envSchema = z.object({
 
   // Background odds sync cadence - just keeps the match schedule/odds reasonably fresh between
   // daily analysis runs. The daily analysis job also triggers its own sync immediately before
-  // analyzing, so this only needs to be "not too stale," not real-time.
-  SLOW_SYNC_INTERVAL_MINUTES: z.coerce.number().positive().default(180),
+  // analyzing, so this only needs to be "not too stale," not real-time. Kept infrequent to stay
+  // well within the free Odds API monthly quota (see ODDS_API_REGIONS comment above).
+  SLOW_SYNC_INTERVAL_MINUTES: z.coerce.number().positive().default(720),
 
-  RESULTS_CHECK_INTERVAL_MINUTES: z.coerce.number().positive().default(30),
+  RESULTS_CHECK_INTERVAL_MINUTES: z.coerce.number().positive().default(360),
 
   // One consolidated full-analysis message per day covering every match in the next 24h,
   // generated via a single Gemini call (not one call per match) to conserve free-tier quota.

@@ -2,7 +2,9 @@ name: Sync Odds
 
 on:
   schedule:
-    - cron: "0 */3 * * *"
+    # Every 12h - The Odds API charges per (markets x regions); kept infrequent to stay well
+    # within the free 500/month quota alongside the daily-analysis and check-results jobs.
+    - cron: "0 */12 * * *"
   workflow_dispatch: {}
 
 jobs:

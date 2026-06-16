@@ -2,7 +2,9 @@ name: Check Results
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    # Every 6h - this is a "did we call it" follow-up message, not time-critical, so a less
+    # frequent check is fine and keeps Odds API quota usage well within the free 500/month limit.
+    - cron: "0 */6 * * *"
   workflow_dispatch: {}
 
 jobs:
