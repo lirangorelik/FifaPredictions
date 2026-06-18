@@ -49,7 +49,7 @@ export async function runDailyAnalysis(): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Batch analysis failed:", message);
     await notifyAdmin(`⚠️ Daily analysis batch failed: ${message}`);
-    return;
+    throw err;
   }
 
   if (results.length === 0) {
