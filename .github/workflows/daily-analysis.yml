@@ -2,9 +2,10 @@ name: Daily Analysis
 
 on:
   schedule:
-    # 17:00 Israel Daylight Time (UTC+3) = 14:00 UTC. IDT covers the entire June-July 2026 World
-    # Cup window, so no DST adjustment is needed for this tournament.
-    - cron: "0 14 * * *"
+    # Run every 2 hours. GitHub's cron scheduler is unreliable and can silently skip or delay
+    # a once-daily run by hours. Running frequently is safe because BATCH_DEDUPE_HOURS=20 in
+    # the app prevents duplicate Telegram messages - only the first run each day actually sends.
+    - cron: "0 */2 * * *"
   workflow_dispatch: {}
 
 jobs:
