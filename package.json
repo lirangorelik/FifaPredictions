@@ -12,7 +12,8 @@
     "run:analysis": "tsx scripts/runDailyAnalysis.ts",
     "run:results": "tsx scripts/runResultsCheck.ts",
     "run:sync": "tsx scripts/runOddsSync.ts",
-    "dashboard": "tsx scripts/runDashboard.ts"
+    "dashboard": "tsx scripts/runDashboard.ts",
+    "run:learning": "tsx scripts/runLearning.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

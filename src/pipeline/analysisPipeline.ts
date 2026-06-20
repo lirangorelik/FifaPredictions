@@ -3,6 +3,7 @@ import { getOddsHistory } from "../db/oddsRepo.js";
 import { savePrediction } from "../db/predictionsRepo.js";
 import { fetchMatchAnalysis } from "../services/tavilyService.js";
 import { buildBatchPredictionPrompt, matchLabel, type MatchContext } from "./promptBuilder.js";
+import { getAllLearnings } from "../db/learningsRepo.js";
 import { generateBatchPredictions } from "./geminiClient.js";
 
 export interface AnalysisResult {
@@ -39,7 +40,11 @@ export async function runBatchAnalysisPipeline(matches: MatchWithTeams[]): Promi
 
   if (contexts.length === 0) return [];
 
-  const prompt = buildBatchPredictionPrompt(contexts);
+  const learnings = await getAllLearnings();
+  if (learnings.length > 0) {
+    console.log(`Injecting ${learnings.length} past lesson(s) into prediction prompt.`);
+  }
+  const prompt = buildBatchPredictionPrompt(contexts, learnings);
   const { output, raw } = await generateBatchPredictions(prompt);
 
   const results: AnalysisResult[] = [];

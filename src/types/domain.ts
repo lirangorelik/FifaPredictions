@@ -70,6 +70,15 @@ export interface Prediction {
   created_at: string;
 }
 
+export interface PredictionLearning {
+  id: string;
+  match_id: string;
+  prediction_id: string;
+  error_type: string;
+  lesson: string;
+  created_at: string;
+}
+
 export interface AlertLogEntry {
   id: string;
   match_id: string;

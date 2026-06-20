@@ -1,4 +1,4 @@
-import type { MatchWithTeams, OddsSnapshot } from "../types/domain.js";
+import type { MatchWithTeams, OddsSnapshot, PredictionLearning } from "../types/domain.js";
 import type { ArticleSummary } from "../services/tavilyService.js";
 
 export interface MatchContext {
@@ -86,17 +86,28 @@ QUALITATIVE ANALYSIS (top articles/news found today):
 ${articlesBlock}`;
 }
 
+function buildLearningsBlock(learnings: PredictionLearning[]): string {
+  if (learnings.length === 0) return "";
+  const lines = learnings.map((l) => {
+    const date = new Date(l.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    return `[${l.error_type}] (${date}): ${l.lesson}`;
+  });
+  return `LESSONS FROM ALL PAST PREDICTIONS IN THIS TOURNAMENT (study these and apply them when relevant — these are your own past mistakes and successes):
+${lines.map((l, i) => `${i + 1}. ${l}`).join("\n")}`;
+}
+
 /**
  * Builds one prompt covering every match in the batch, asking the LLM to analyze each
  * independently but return all predictions together in a single JSON response - this is what
  * lets one Gemini call replace what would otherwise be N separate calls.
  */
-export function buildBatchPredictionPrompt(contexts: MatchContext[]): string {
+export function buildBatchPredictionPrompt(contexts: MatchContext[], learnings: PredictionLearning[] = []): string {
   const sections = contexts.map((ctx, i) => buildMatchSection(ctx, i)).join("\n\n");
+  const learningsBlock = buildLearningsBlock(learnings);
 
   return `You are a quantitative football (soccer) analyst building precise scoreline predictions for multiple 2026 FIFA World Cup matches kicking off in the next 24 hours. Analyze each match independently using only its own data below, but return all predictions together in one JSON response.
 
-${sections}
+${learningsBlock ? learningsBlock + "\n\n" : ""}${sections}
 
 TASK:
 For each match above, cross-reference the bookmaker market implied probabilities (moneyline + goal totals), the bookmaker's own correct-score grid, and the independent Polymarket prediction-market sentiment with the qualitative team news to project a realistic match flow and a precise final scoreline for that match. Use each match's correct-score grid as a concrete anchor for which exact scorelines the market itself considers plausible, but feel free to deviate from its single most-likely entry if the qualitative news or line movement strongly suggests otherwise. Note any meaningful divergence between bookmaker odds and Polymarket sentiment for each match.

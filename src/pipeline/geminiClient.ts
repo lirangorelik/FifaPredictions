@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { env } from "../config/env.js";
 import { batchPredictionOutputSchema, geminiBatchResponseSchema, type BatchPredictionOutput } from "./predictionSchema.js";
+import { batchLearningOutputSchema, geminiLearningResponseSchema, type BatchLearningOutput } from "./learningSchema.js";
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 
@@ -54,6 +55,52 @@ export async function generateBatchPredictions(prompt: string): Promise<BatchPre
       const parsed = batchPredictionOutputSchema.safeParse(json);
       if (!parsed.success) {
         throw new Error(`Batch prediction failed schema validation: ${parsed.error.message}`);
+      }
+
+      return { output: parsed.data, raw: result.response };
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientGeminiError(err) || attempt === RETRY_DELAYS_MS.length) throw err;
+      const delay = RETRY_DELAYS_MS[attempt];
+      console.warn(`Gemini transient error (attempt ${attempt + 1}/${RETRY_DELAYS_MS.length + 1}), retrying in ${delay / 1000}s: ${err instanceof Error ? err.message : String(err)}`);
+      await sleep(delay);
+    }
+  }
+
+  throw lastErr;
+}
+
+export interface BatchLearningWithRaw {
+  output: BatchLearningOutput;
+  raw: unknown;
+}
+
+/** One Gemini call generating lessons for all unlearned finished matches. Same retry pattern as generateBatchPredictions. */
+export async function generateLearnings(prompt: string): Promise<BatchLearningWithRaw> {
+  const model = genAI.getGenerativeModel({
+    model: env.GEMINI_MODEL,
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: geminiLearningResponseSchema,
+    },
+  });
+
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(`Gemini returned non-JSON output: ${text}`);
+      }
+
+      const parsed = batchLearningOutputSchema.safeParse(json);
+      if (!parsed.success) {
+        throw new Error(`Batch learning failed schema validation: ${parsed.error.message}`);
       }
 
       return { output: parsed.data, raw: result.response };
