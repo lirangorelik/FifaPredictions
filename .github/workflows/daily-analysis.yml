@@ -2,10 +2,13 @@ name: Daily Analysis
 
 on:
   schedule:
-    # Run every 2 hours. GitHub's cron scheduler is unreliable and can silently skip or delay
-    # a once-daily run by hours. Running frequently is safe because BATCH_DEDUPE_HOURS=20 in
-    # the app prevents duplicate Telegram messages - only the first run each day actually sends.
-    - cron: "0 */2 * * *"
+    # Three fallback attempts to guard against GitHub's unreliable cron scheduler.
+    # 14:00 UTC = 17:00 Israel (primary). 16:00 and 18:00 UTC are safety nets in case the
+    # primary is skipped. BATCH_DEDUPE_HOURS=20 and the imminent-kickoff guard in the job
+    # prevent duplicate Telegram sends when the primary run succeeds.
+    - cron: "0 14 * * *"
+    - cron: "0 16 * * *"
+    - cron: "0 18 * * *"
   workflow_dispatch: {}
 
 jobs:

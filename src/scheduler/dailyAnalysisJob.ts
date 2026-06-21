@@ -42,6 +42,18 @@ export async function runDailyAnalysis(): Promise<void> {
     return;
   }
 
+  // If some matches were already analyzed (i.e. this is a fallback run, not the first of the day),
+  // only proceed if at least one new match kicks off within 18 hours. This prevents fallback runs
+  // from sending a Telegram message just because a far-future game drifted into the 24h window.
+  if (toAnalyze.length < upcoming.length) {
+    const imminentCutoff = Date.now() + 18 * 60 * 60 * 1000;
+    const hasImminent = toAnalyze.some((m) => new Date(m.kickoff_time).getTime() < imminentCutoff);
+    if (!hasImminent) {
+      console.log("Daily analysis: new matches found but none kicking off within 18h — deferring to next day's run.");
+      return;
+    }
+  }
+
   let results;
   try {
     results = await runBatchAnalysisPipeline(toAnalyze);
