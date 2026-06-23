@@ -1,10 +1,15 @@
 import type { MatchWithTeams, OddsSnapshot, PredictionLearning } from "../types/domain.js";
 import type { ArticleSummary } from "../services/tavilyService.js";
+import type { PoissonModel } from "./poissonModel.js";
+import type { TeamFormMatch } from "../db/learningsRepo.js";
 
 export interface MatchContext {
   match: MatchWithTeams;
   oddsHistory: OddsSnapshot[];
   articles: ArticleSummary[];
+  model: PoissonModel | null;
+  homeForm: TeamFormMatch[];
+  awayForm: TeamFormMatch[];
 }
 
 function pct(value: number | null): string {
@@ -59,8 +64,31 @@ function describeCorrectScoreMarket(latest: OddsSnapshot | undefined): string {
     .join(", ");
 }
 
+function describeModel(model: PoissonModel | null, match: MatchWithTeams): string {
+  if (!model) return "No quantitative model available (market totals/odds missing for this fixture).";
+  const { home_team, away_team } = match;
+  const top = model.topScores.map((s) => `${s.home}-${s.away} (${pct(s.prob)})`).join(", ");
+  const best = model.bestPointsScore;
+  return [
+    `Expected goals: ${home_team.name} ${model.lambdaHome.toFixed(2)} / ${away_team.name} ${model.lambdaAway.toFixed(2)}.`,
+    `Model outcome probabilities: Home ${pct(model.outcomeProbs.home)} | Draw ${pct(model.outcomeProbs.draw)} | Away ${pct(model.outcomeProbs.away)}.`,
+    `Most likely exact scorelines: ${top}.`,
+    `EXPECTED-POINTS-OPTIMAL PICK for this game's scoring: ${best.home}-${best.away}. Use this as your default scoreline.`,
+  ].join("\n");
+}
+
+function describeForm(form: TeamFormMatch[], teamName: string): string {
+  if (form.length === 0) return `${teamName}: no prior tournament matches recorded.`;
+  const lines = form.map((f) => {
+    const result = f.actual_home_goals > f.actual_away_goals ? "W" : f.actual_home_goals < f.actual_away_goals ? "L" : "D";
+    const perspective = f.home_team_name === teamName ? result : result === "W" ? "L" : result === "L" ? "W" : "D";
+    return `${f.home_team_name} ${f.actual_home_goals}-${f.actual_away_goals} ${f.away_team_name} (${perspective})`;
+  });
+  return `${teamName} (most recent first): ${lines.join("; ")}`;
+}
+
 function buildMatchSection(ctx: MatchContext, index: number): string {
-  const { match, oddsHistory, articles } = ctx;
+  const { match, oddsHistory, articles, model, homeForm, awayForm } = ctx;
   const latest = oddsHistory[oddsHistory.length - 1];
 
   const articlesBlock = articles.length
@@ -81,6 +109,13 @@ PREDICTION MARKET SENTIMENT (Polymarket, peer-to-peer, prices are direct probabi
 BOOKMAKER'S OWN TOP SCORELINES (correct-score market, vig-removed implied probability, most likely first): ${describeCorrectScoreMarket(latest)}
 
 LINE MOVEMENT (last 24h, ${oddsHistory.length} snapshot(s) recorded): ${describeLineMovement(oddsHistory)}
+
+QUANTITATIVE MODEL (Poisson, derived from the market's goal-total line and win probabilities):
+${describeModel(model, match)}
+
+RECENT FORM (this tournament):
+- ${describeForm(homeForm, match.home_team.name)}
+- ${describeForm(awayForm, match.away_team.name)}
 
 QUALITATIVE ANALYSIS (top articles/news found today):
 ${articlesBlock}`;
@@ -105,20 +140,20 @@ export function buildBatchPredictionPrompt(contexts: MatchContext[], learnings: 
   const sections = contexts.map((ctx, i) => buildMatchSection(ctx, i)).join("\n\n");
   const learningsBlock = buildLearningsBlock(learnings);
 
-  return `You are a quantitative football (soccer) analyst building precise scoreline predictions for multiple 2026 FIFA World Cup matches kicking off in the next 24 hours. Analyze each match independently using only its own data below, but return all predictions together in one JSON response.
+  return `You are a quantitative football (soccer) analyst predicting 2026 FIFA World Cup scorelines to WIN A PREDICTION GAME. The game is scored as: +1 point for correctly calling the result (home win / draw / away win) and +3 points for the exact final scoreline. Your sole objective is to MAXIMIZE EXPECTED POINTS across all matches — not to look clever or interesting.
+
+Because an exact score is worth 3x the outcome, each match carries a real trade-off: chasing a low-probability exact score can cost you the safer outcome point. For every match below you are given a QUANTITATIVE MODEL that has already computed the expected-points-optimal scoreline from the market. Default to that pick. Only override it when the qualitative team news (confirmed injuries, suspensions, rotation, must-win context, sharp line movement) gives a concrete, stated reason — and when you do, move to another high-probability scoreline, not a long-shot. Analyze each match independently using only its own data below, but return all predictions together in one JSON response.
 
 ${learningsBlock ? learningsBlock + "\n\n" : ""}${sections}
 
 TASK:
-For each match above, cross-reference the bookmaker market implied probabilities (moneyline + goal totals), the bookmaker's own correct-score grid, and the independent Polymarket prediction-market sentiment with the qualitative team news to project a realistic match flow and a precise final scoreline for that match. Use each match's correct-score grid as a concrete anchor for which exact scorelines the market itself considers plausible, but feel free to deviate from its single most-likely entry if the qualitative news or line movement strongly suggests otherwise. Note any meaningful divergence between bookmaker odds and Polymarket sentiment for each match.
+For each match, START from the QUANTITATIVE MODEL's expected-points-optimal pick. Then sanity-check it against the bookmaker correct-score grid, the Polymarket sentiment, the recent form, and the qualitative team news. Keep that pick unless a concrete signal justifies moving to another HIGH-PROBABILITY scoreline (from the model's "most likely" list) — for example, a key striker ruled out (shift goals down), a leaky defence or a must-win chase (shift goals up), or a clear mismatch the market underrates. Note any meaningful divergence between the model, the bookmaker odds, and Polymarket sentiment.
 
-SCORELINE CALIBRATION (apply to every prediction — these correct real, measured biases in past predictions):
-- Do NOT default to 2-1. It has been wildly over-predicted; only use it for a genuinely tight favourite win, never as a generic "the better team edges it" answer.
-- Anchor the TOTAL goals to the Over/Under line. If the totals line is 3.0 or higher, your two scores should usually add up to more than the line; if it is 2.0 or lower, lean to a low-scoring result. Do not predict a 2-1 (3 goals) when the line says ~3.5.
-- Take draws seriously. They occur far more often than predicted. When no side's vig-removed implied probability is above ~45%, a draw (1-1, 0-0, 2-2) is often the correct call.
-- Commit to blunt scorelines when warranted. When a side's implied probability is above ~65% against a clearly weaker opponent, do not be timid — lopsided results (3-0, 4-0, 4-1 and wider) are common at this tournament. Avoid shrinking every favourite win down to 2-1 or 2-0.
-- Vary margins and clean sheets to fit each specific matchup instead of reusing the same one- or two-goal scorelines across different games.
-- Confidence discipline: reserve 8-10 only for standout, low-variance matchups. Given how random exact scorelines are, most predictions should land in the 4-7 range. Do not state high confidence in a precise scoreline you are merely guessing.
+GUARDRAILS (the model already enforces these, so only your overrides need checking against them):
+- Do not default to 2-1; it has been heavily over-predicted. Only pick it if it is genuinely the model's or market's most likely score.
+- Keep your predicted total goals close to the model's expected total (≈ the Over/Under line) unless news justifies otherwise.
+- Take draws seriously when the model's draw probability is comparable to a win; do not reflexively pick a winner.
+- Confidence discipline: reserve 8-10 only for standout, low-variance matchups. Most exact-score predictions should sit in the 4-7 range — do not claim high confidence in a precise score you are essentially guessing.
 
 Respond with a single JSON object containing a "predictions" array with exactly one entry per match listed above, in the same order. Each entry's match_label must exactly equal the "Home vs Away" text shown in that match's "=== MATCH N: ... ===" header. Each entry must include:
 - match_label: string, exact match identifier as described above

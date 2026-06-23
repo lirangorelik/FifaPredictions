@@ -3,8 +3,9 @@ import { getOddsHistory } from "../db/oddsRepo.js";
 import { savePrediction } from "../db/predictionsRepo.js";
 import { fetchMatchAnalysis } from "../services/tavilyService.js";
 import { buildBatchPredictionPrompt, matchLabel, type MatchContext } from "./promptBuilder.js";
-import { getRecentLearnings } from "../db/learningsRepo.js";
+import { getRecentLearnings, getTeamRecentForm } from "../db/learningsRepo.js";
 import { generateBatchPredictions } from "./geminiClient.js";
+import { buildPoissonModel } from "./poissonModel.js";
 
 export interface AnalysisResult {
   match: MatchWithTeams;
@@ -35,7 +36,19 @@ export async function runBatchAnalysisPipeline(matches: MatchWithTeams[]): Promi
       continue;
     }
     const articles = await fetchMatchAnalysis(match.home_team.name, match.away_team.name);
-    contexts.push({ match, oddsHistory, articles });
+
+    // Quantitative anchor from the latest market snapshot (no external API call) plus each team's
+    // recent tournament form from our own DB - both feed the prompt so the LLM starts from math and
+    // real form rather than guessing the scoreline outright.
+    const latestOdds = oddsHistory[oddsHistory.length - 1];
+    const model = buildPoissonModel({
+      totalsLine: latestOdds.totals_point,
+      homeImpliedProb: latestOdds.home_implied_prob,
+    });
+    const homeForm = await getTeamRecentForm(match.home_team.name, match.id);
+    const awayForm = await getTeamRecentForm(match.away_team.name, match.id);
+
+    contexts.push({ match, oddsHistory, articles, model, homeForm, awayForm });
   }
 
   if (contexts.length === 0) return [];
