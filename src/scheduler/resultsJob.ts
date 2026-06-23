@@ -1,6 +1,6 @@
 import { env } from "../config/env.js";
 import { fetchScores, parseFinalScore } from "../services/oddsApiService.js";
-import { findMatchesAwaitingResult, recordMatchResult, getMatchWithTeams } from "../db/matchesRepo.js";
+import { findMatchesAwaitingResult, recordMatchResult, getMatchWithTeams, markStaleMatchesAbandoned } from "../db/matchesRepo.js";
 import { getLatestPrediction } from "../db/predictionsRepo.js";
 import { formatResultMessage } from "../bot/formatResultAlert.js";
 import { sendTelegramMessage, notifyAdmin } from "../bot/telegramService.js";
@@ -47,5 +47,18 @@ export async function checkFinishedMatches(): Promise<void> {
       console.error(`Failed to process result for match ${match.id}:`, message);
       await notifyAdmin(`⚠️ Failed to send result alert for match ${match.id}: ${message}`);
     }
+  }
+
+  // Give up on matches that have been waiting too long for a result the scores endpoint will
+  // never return (it only looks back ~3 days). This is a DB-only operation - no extra API calls.
+  try {
+    const abandoned = await markStaleMatchesAbandoned();
+    for (const m of abandoned) {
+      console.warn(`Marked stale match abandoned: ${m.home_team.name} vs ${m.away_team.name} (kickoff ${m.kickoff_time}).`);
+      await notifyAdmin(`ℹ️ No result ever found for ${m.home_team.name} vs ${m.away_team.name} — marked abandoned.`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Failed to mark stale matches abandoned:", message);
   }
 }

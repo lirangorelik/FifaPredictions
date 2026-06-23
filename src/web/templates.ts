@@ -64,12 +64,26 @@ export function renderAccuracyPage(stats: AccuracyStats): string {
   const exactPct = stats.totalFinishedWithPrediction > 0 ? `${((stats.exactScoreCount / stats.totalFinishedWithPrediction) * 100).toFixed(1)}%` : "—";
   const outcomePct =
     stats.totalFinishedWithPrediction > 0 ? `${((stats.correctOutcomeCount / stats.totalFinishedWithPrediction) * 100).toFixed(1)}%` : "—";
+  const brier = stats.brierScore == null ? "—" : stats.brierScore.toFixed(3);
 
-  const body = `<table>
+  const summary = `<table>
 <tr><th>Finished matches tracked</th><td>${stats.totalFinishedWithPrediction}</td></tr>
 <tr><th>Exact scoreline correct</th><td>${stats.exactScoreCount} (${exactPct})</td></tr>
 <tr><th>Correct outcome (W/D/L)</th><td>${stats.correctOutcomeCount} (${outcomePct})</td></tr>
+<tr><th>Brier score (confidence calibration)</th><td>${brier} <span class="muted">(lower is better; 0.25 ≈ coin flip)</span></td></tr>
 </table>`;
 
-  return layout("Prediction Accuracy", body);
+  const bucketRows = stats.confidenceBuckets
+    .map((b) => {
+      const hitRate = b.count > 0 ? `${((b.correctOutcomeCount / b.count) * 100).toFixed(1)}%` : "—";
+      return `<tr><td>${escapeHtml(b.label)}</td><td>${b.count}</td><td>${b.correctOutcomeCount}</td><td>${hitRate}</td></tr>`;
+    })
+    .join("\n");
+
+  const buckets = `<h1 style="font-size:1.1rem;margin-top:2rem">Outcome hit-rate by confidence</h1>
+<p class="muted">If the model is well-calibrated, higher-confidence buckets should win more often.</p>
+<table><thead><tr><th>Confidence</th><th>Predictions</th><th>Correct outcome</th><th>Hit rate</th></tr></thead>
+<tbody>${bucketRows}</tbody></table>`;
+
+  return layout("Prediction Accuracy", summary + buckets);
 }

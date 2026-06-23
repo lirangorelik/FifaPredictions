@@ -1,6 +1,6 @@
 import type { MatchWithTeams, OddsSnapshot, Prediction } from "../types/domain.js";
 
-function escapeMarkdownV2(text: string): string {
+export function escapeMarkdownV2(text: string): string {
   return text.replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, (match) => `\\${match}`);
 }
 

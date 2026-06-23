@@ -17,7 +17,13 @@ interface TavilySearchResponse {
   results: TavilySearchResult[];
 }
 
-/** Fetches the top 5 match-day articles/threads (injuries, team news, tactics) for a fixture. */
+// Team news goes stale fast (injuries, lineups), so restrict to recent news rather than letting the
+// LLM reason over weeks-old articles. Snippets are capped so a single verbose result can't bloat the
+// batch prompt (and its token cost) disproportionately.
+const SNIPPET_MAX_CHARS = 400;
+const NEWS_RECENCY_DAYS = 10;
+
+/** Fetches the top 5 recent match-day articles/threads (injuries, team news, tactics) for a fixture. */
 export async function fetchMatchAnalysis(homeTeam: string, awayTeam: string): Promise<ArticleSummary[]> {
   const query = `${homeTeam} vs ${awayTeam} World Cup 2026 injury news team news tactical analysis prediction`;
 
@@ -27,6 +33,8 @@ export async function fetchMatchAnalysis(homeTeam: string, awayTeam: string): Pr
     body: JSON.stringify({
       api_key: env.TAVILY_API_KEY,
       query,
+      topic: "news",
+      days: NEWS_RECENCY_DAYS,
       search_depth: "basic",
       max_results: 5,
       include_answer: false,
@@ -42,6 +50,6 @@ export async function fetchMatchAnalysis(homeTeam: string, awayTeam: string): Pr
   return data.results.slice(0, 5).map((r) => ({
     title: r.title,
     url: r.url,
-    snippet: r.content,
+    snippet: r.content.length > SNIPPET_MAX_CHARS ? `${r.content.slice(0, SNIPPET_MAX_CHARS)}…` : r.content,
   }));
 }

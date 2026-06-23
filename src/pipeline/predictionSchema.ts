@@ -1,15 +1,33 @@
 import { SchemaType, type Schema } from "@google/generative-ai";
 import { z } from "zod";
 
-export const matchPredictionSchema = z.object({
-  match_label: z.string().min(1),
-  predicted_outcome: z.enum(["HOME_WIN", "AWAY_WIN", "DRAW"]),
-  predicted_home_goals: z.number().int().min(0).max(15),
-  predicted_away_goals: z.number().int().min(0).max(15),
-  confidence_score: z.number().int().min(1).max(10),
-  market_consensus: z.string().min(1),
-  analytical_edge: z.string().min(1),
-});
+export type PredictedOutcome = "HOME_WIN" | "AWAY_WIN" | "DRAW";
+
+/** The only correct mapping from a scoreline to a W/D/L outcome. */
+export function deriveOutcome(homeGoals: number, awayGoals: number): PredictedOutcome {
+  if (homeGoals > awayGoals) return "HOME_WIN";
+  if (homeGoals < awayGoals) return "AWAY_WIN";
+  return "DRAW";
+}
+
+// We still ask Gemini for predicted_outcome (it helps the model commit to a coherent answer), but
+// the model occasionally returns an outcome that contradicts its own scoreline. The scoreline is
+// the ground truth, so we recompute the outcome from it rather than trusting the stated value -
+// this guarantees outcome and goals can never disagree downstream (accuracy stats, alerts, etc.).
+export const matchPredictionSchema = z
+  .object({
+    match_label: z.string().min(1),
+    predicted_outcome: z.enum(["HOME_WIN", "AWAY_WIN", "DRAW"]),
+    predicted_home_goals: z.number().int().min(0).max(15),
+    predicted_away_goals: z.number().int().min(0).max(15),
+    confidence_score: z.number().int().min(1).max(10),
+    market_consensus: z.string().min(1),
+    analytical_edge: z.string().min(1),
+  })
+  .transform((p) => ({
+    ...p,
+    predicted_outcome: deriveOutcome(p.predicted_home_goals, p.predicted_away_goals),
+  }));
 
 export const batchPredictionOutputSchema = z.object({
   predictions: z.array(matchPredictionSchema),

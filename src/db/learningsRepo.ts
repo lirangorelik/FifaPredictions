@@ -193,12 +193,18 @@ export async function saveLearning(input: NewLearning): Promise<void> {
   if (error) throw error;
 }
 
-/** All learnings ordered oldest-first — injected into prediction prompts as full history. */
-export async function getAllLearnings(): Promise<PredictionLearning[]> {
+/**
+ * The most recent `limit` learnings, returned oldest-first for stable prompt ordering. Capped
+ * because every lesson is injected into every prediction prompt - across a 64-match tournament an
+ * uncapped list would grow the prompt (and its token cost) without bound and dilute the signal with
+ * stale, possibly contradictory advice. Recent lessons are the most relevant to current form.
+ */
+export async function getRecentLearnings(limit = 30): Promise<PredictionLearning[]> {
   const { data, error } = await supabase
     .from("prediction_learnings")
     .select("*")
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(limit);
   if (error) throw error;
-  return (data ?? []) as PredictionLearning[];
+  return ((data ?? []) as PredictionLearning[]).reverse();
 }

@@ -1,4 +1,4 @@
-export type MatchStatus = "scheduled" | "live" | "finished" | "cancelled";
+export type MatchStatus = "scheduled" | "live" | "finished" | "cancelled" | "abandoned";
 
 export interface Team {
   id: number;

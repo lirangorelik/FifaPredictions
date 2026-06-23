@@ -29,11 +29,35 @@ function yesPrice(market: PolymarketMarket): number | null {
   return Number(prices[yesIndex]);
 }
 
+/** Lowercase, strip punctuation/diacritics, collapse whitespace - so "São Paulo" ~ "sao paulo". */
+function normalizeName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Finds the "Will {team} win?" market for a team, tolerant of naming differences between data sources. */
+function findWinMarket(event: PolymarketEvent, team: string): PolymarketMarket | undefined {
+  const target = normalizeName(team);
+  return event.markets.find((m) => {
+    const q = normalizeName(m.question);
+    return q.startsWith("will ") && q.includes(" win") && q.includes(target);
+  });
+}
+
 /**
  * Polymarket structures each soccer match as an event with three independent Yes/No
  * markets ("Will {home} win?", "Will {away} win?", "Will it end in a draw?"). The Yes
  * price on each *is* the market-implied probability directly (no odds conversion needed).
- * Returns null if no matching event/markets are found - not every fixture has a Polymarket market.
+ *
+ * A single search returns several candidate events; rather than blindly trusting the first hit
+ * (which is often an unrelated market when team names differ between The Odds API and Polymarket),
+ * we pick the first event that actually contains BOTH teams' win markets plus a draw market.
+ * Returns null if none qualify - not every fixture has a Polymarket market.
  */
 export async function fetchPolymarketSummary(homeTeam: string, awayTeam: string): Promise<PolymarketSummary | null> {
   const url = new URL("https://gamma-api.polymarket.com/public-search");
@@ -46,18 +70,23 @@ export async function fetchPolymarketSummary(homeTeam: string, awayTeam: string)
   }
 
   const data = (await res.json()) as PolymarketSearchResponse;
-  const event = data.events?.[0];
-  if (!event) return null;
+  const events = data.events ?? [];
+  if (events.length === 0) return null;
 
-  const homeMarket = event.markets.find((m) => m.question.toLowerCase().startsWith(`will ${homeTeam.toLowerCase()} win`));
-  const awayMarket = event.markets.find((m) => m.question.toLowerCase().startsWith(`will ${awayTeam.toLowerCase()} win`));
-  const drawMarket = event.markets.find((m) => m.question.toLowerCase().includes("draw"));
+  for (const event of events) {
+    const homeMarket = findWinMarket(event, homeTeam);
+    const awayMarket = findWinMarket(event, awayTeam);
+    const drawMarket = event.markets.find((m) => normalizeName(m.question).includes("draw"));
+    if (!homeMarket || !awayMarket || !drawMarket) continue;
 
-  const homeProb = homeMarket ? yesPrice(homeMarket) : null;
-  const awayProb = awayMarket ? yesPrice(awayMarket) : null;
-  const drawProb = drawMarket ? yesPrice(drawMarket) : null;
+    const homeProb = yesPrice(homeMarket);
+    const awayProb = yesPrice(awayMarket);
+    const drawProb = yesPrice(drawMarket);
+    if (homeProb == null || awayProb == null || drawProb == null) continue;
 
-  if (homeProb == null || awayProb == null || drawProb == null) return null;
+    return { homeProb, drawProb, awayProb, eventUrl: `https://polymarket.com/event/${event.slug}` };
+  }
 
-  return { homeProb, drawProb, awayProb, eventUrl: `https://polymarket.com/event/${event.slug}` };
+  console.warn(`Polymarket: no event matched both teams for "${homeTeam} vs ${awayTeam}" (${events.length} candidate(s) searched).`);
+  return null;
 }

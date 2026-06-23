@@ -3,7 +3,7 @@ import { getOddsHistory } from "../db/oddsRepo.js";
 import { savePrediction } from "../db/predictionsRepo.js";
 import { fetchMatchAnalysis } from "../services/tavilyService.js";
 import { buildBatchPredictionPrompt, matchLabel, type MatchContext } from "./promptBuilder.js";
-import { getAllLearnings } from "../db/learningsRepo.js";
+import { getRecentLearnings } from "../db/learningsRepo.js";
 import { generateBatchPredictions } from "./geminiClient.js";
 
 export interface AnalysisResult {
@@ -40,12 +40,12 @@ export async function runBatchAnalysisPipeline(matches: MatchWithTeams[]): Promi
 
   if (contexts.length === 0) return [];
 
-  const learnings = await getAllLearnings();
+  const learnings = await getRecentLearnings();
   if (learnings.length > 0) {
     console.log(`Injecting ${learnings.length} past lesson(s) into prediction prompt.`);
   }
   const prompt = buildBatchPredictionPrompt(contexts, learnings);
-  const { output, raw } = await generateBatchPredictions(prompt);
+  const { output } = await generateBatchPredictions(prompt);
 
   const results: AnalysisResult[] = [];
   for (const ctx of contexts) {
@@ -64,7 +64,9 @@ export async function runBatchAnalysisPipeline(matches: MatchWithTeams[]): Promi
       confidence_score: matched.confidence_score,
       market_consensus: matched.market_consensus,
       analytical_edge: matched.analytical_edge,
-      raw_llm_response: raw,
+      // Store only this match's own slice of the batch response, not the entire batch object
+      // duplicated into every row (that bloated storage N-fold for an N-match batch).
+      raw_llm_response: matched,
     });
 
     const latestOdds = ctx.oddsHistory[ctx.oddsHistory.length - 1];

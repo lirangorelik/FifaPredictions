@@ -98,6 +98,24 @@ export async function findMatchesAwaitingResult(graceHours = 2): Promise<Match[]
   return (data ?? []) as Match[];
 }
 
+/**
+ * Marks long-unresolved scheduled matches (kickoff more than `staleHours` ago, still no result)
+ * as 'abandoned' so they stop being re-scanned every results check. The Odds API scores endpoint
+ * only looks back ~3 days, so a default of 96h gives the periodic results check several chances to
+ * resolve a match before we give up on it. Returns the affected matches (with teams) for alerting.
+ */
+export async function markStaleMatchesAbandoned(staleHours = 96): Promise<MatchWithTeams[]> {
+  const cutoff = new Date(Date.now() - staleHours * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("matches")
+    .update({ status: "abandoned", updated_at: new Date().toISOString() })
+    .eq("status", "scheduled")
+    .lt("kickoff_time", cutoff)
+    .select("*");
+  if (error) throw error;
+  return attachTeams((data ?? []) as Match[]);
+}
+
 export async function recordMatchResult(matchId: string, homeGoals: number, awayGoals: number): Promise<Match> {
   const { data, error } = await supabase
     .from("matches")
