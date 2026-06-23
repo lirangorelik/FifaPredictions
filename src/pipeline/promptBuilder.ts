@@ -112,6 +112,14 @@ ${learningsBlock ? learningsBlock + "\n\n" : ""}${sections}
 TASK:
 For each match above, cross-reference the bookmaker market implied probabilities (moneyline + goal totals), the bookmaker's own correct-score grid, and the independent Polymarket prediction-market sentiment with the qualitative team news to project a realistic match flow and a precise final scoreline for that match. Use each match's correct-score grid as a concrete anchor for which exact scorelines the market itself considers plausible, but feel free to deviate from its single most-likely entry if the qualitative news or line movement strongly suggests otherwise. Note any meaningful divergence between bookmaker odds and Polymarket sentiment for each match.
 
+SCORELINE CALIBRATION (apply to every prediction — these correct real, measured biases in past predictions):
+- Do NOT default to 2-1. It has been wildly over-predicted; only use it for a genuinely tight favourite win, never as a generic "the better team edges it" answer.
+- Anchor the TOTAL goals to the Over/Under line. If the totals line is 3.0 or higher, your two scores should usually add up to more than the line; if it is 2.0 or lower, lean to a low-scoring result. Do not predict a 2-1 (3 goals) when the line says ~3.5.
+- Take draws seriously. They occur far more often than predicted. When no side's vig-removed implied probability is above ~45%, a draw (1-1, 0-0, 2-2) is often the correct call.
+- Commit to blunt scorelines when warranted. When a side's implied probability is above ~65% against a clearly weaker opponent, do not be timid — lopsided results (3-0, 4-0, 4-1 and wider) are common at this tournament. Avoid shrinking every favourite win down to 2-1 or 2-0.
+- Vary margins and clean sheets to fit each specific matchup instead of reusing the same one- or two-goal scorelines across different games.
+- Confidence discipline: reserve 8-10 only for standout, low-variance matchups. Given how random exact scorelines are, most predictions should land in the 4-7 range. Do not state high confidence in a precise scoreline you are merely guessing.
+
 Respond with a single JSON object containing a "predictions" array with exactly one entry per match listed above, in the same order. Each entry's match_label must exactly equal the "Home vs Away" text shown in that match's "=== MATCH N: ... ===" header. Each entry must include:
 - match_label: string, exact match identifier as described above
 - predicted_outcome: "HOME_WIN", "AWAY_WIN", or "DRAW"
