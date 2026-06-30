@@ -2,13 +2,21 @@ name: Daily Analysis
 
 on:
   schedule:
-    # Three fallback attempts to guard against GitHub's unreliable cron scheduler.
-    # 14:00 UTC = 17:00 Israel (primary). 16:00 and 18:00 UTC are safety nets in case the
-    # primary is skipped. BATCH_DEDUPE_HOURS=20 and the imminent-kickoff guard in the job
-    # prevent duplicate Telegram sends when the primary run succeeds.
-    - cron: "0 14 * * *"
-    - cron: "0 16 * * *"
-    - cron: "0 18 * * *"
+    # GitHub's cron scheduler is unreliable and DELAYS/SKIPS jobs scheduled on the hour (:00) the
+    # most, because that is its highest-load minute. So we (a) run at an off-peak minute (:26) and
+    # (b) fire FIVE times across the afternoon as fallbacks. The first run of the day to succeed
+    # sends the Telegram message; BATCH_DEDUPE_HOURS=20 + the imminent-kickoff guard make every
+    # later run that day a no-op, so this never double-sends.
+    #
+    # Times (UTC ≈ Israel = UTC+3 in summer):
+    #   11:26 (14:26 IL) and 12:26 (15:26 IL) → early buffer, safe before ~17:00 UTC kickoffs
+    #   14:26 (17:26 IL) → original intended slot
+    #   16:26, 18:26 → late safety nets for evening-only match days
+    - cron: "26 11 * * *"
+    - cron: "26 12 * * *"
+    - cron: "26 14 * * *"
+    - cron: "26 16 * * *"
+    - cron: "26 18 * * *"
   workflow_dispatch: {}
 
 jobs:
